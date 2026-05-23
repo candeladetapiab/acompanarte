@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-5 rounded-xl transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed inline-block;
+  }
+  .btn-secondary {
+    @apply bg-secondary-400 hover:bg-secondary-500 text-ink font-medium py-2 px-5 rounded-xl transition-colors duration-200 inline-block;
+  }
+  .input-field {
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition bg-white text-ink placeholder-gray-400;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6;
+  }
+  .label {
+    @apply block text-sm font-medium text-ink mb-1;
+  }
+}

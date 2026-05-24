@@ -25,6 +25,8 @@ export default function AdminPanel() {
   const [pacientes, setPacientes] = useState([])
   const [busquedas, setBusquedas] = useState([])
   const [sesiones, setSesiones] = useState([])
+  const [mensajes, setMensajes] = useState([])
+  const [metricasBusquedas, setMetricasBusquedas] = useState({ porZona: {}, porObraSocial: {}, porEspecialidad: {}, activas: 0, cerradas: 0 })
 
   if (!user) return <Navigate to="/login" />
   if (user.email !== ADMIN_EMAIL) return (
@@ -48,30 +50,43 @@ export default function AdminPanel() {
       { data: mensajesData },
       { data: busquedasData },
       { data: sesionesData },
+      { data: pacientesData },
     ] = await Promise.all([
       supabase.from('at_profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('messages').select('id'),
+      supabase.from('messages').select('*').eq('receiver_id', user.id).order('created_at', { ascending: false }),
       supabase.from('busquedas').select('*').order('created_at', { ascending: false }),
       supabase.from('sessions').select('*').order('fecha', { ascending: false }),
+      supabase.from('profiles').select('id, nombre, apellido, email, created_at').eq('rol', 'paciente').order('created_at', { ascending: false }),
     ])
 
     const atsList = atsData ?? []
     const msgs = mensajesData ?? []
     const busquedasList = busquedasData ?? []
     const sesionesList = sesionesData ?? []
+    const pacientesList = pacientesData ?? []
 
-    // Separar ATs de pacientes por rol (los que tienen at_profiles son ATs)
-    // Traer todos los usuarios de auth via profiles
-    const { data: profilesData } = await supabase
-      .from('at_profiles')
-      .select('id, nombre, apellido, activo, created_at, zona, modalidad, obras_sociales, especialidades, precio, whatsapp, email_contacto')
-      .order('created_at', { ascending: false })
+    // Métricas de búsquedas
+    const porZona = {}
+    const porObraSocial = {}
+    const porEspecialidad = {}
+    let activas = 0
+    let cerradas = 0
+    for (const b of busquedasList) {
+      if (b.activa) activas++; else cerradas++
+      if (b.zona) porZona[b.zona] = (porZona[b.zona] || 0) + 1
+      if (b.obra_social) porObraSocial[b.obra_social] = (porObraSocial[b.obra_social] || 0) + 1
+      if (b.especialidad) porEspecialidad[b.especialidad] = (porEspecialidad[b.especialidad] || 0) + 1
+    }
 
     setAts(atsList)
+    setPacientes(pacientesList)
+    setMensajes(msgs)
     setBusquedas(busquedasList)
     setSesiones(sesionesList)
+    setMetricasBusquedas({ porZona, porObraSocial, porEspecialidad, activas, cerradas })
     setStats({
       ats: atsList.length,
+      pacientes: pacientesList.length,
       mensajes: msgs.length,
       busquedas: busquedasList.length,
       sesiones: sesionesList.length,
@@ -82,6 +97,30 @@ export default function AdminPanel() {
   async function toggleActivoAT(id, activo) {
     await supabase.from('at_profiles').update({ activo: !activo }).eq('id', id)
     fetchAll()
+  }
+
+  function TopList({ data, label }) {
+    const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    const max = sorted[0]?.[1] || 1
+    if (!sorted.length) return <p className="text-white/20 text-xs">Sin datos todavía.</p>
+    return (
+      <div className="space-y-2">
+        <p className="text-white/40 text-xs font-semibold uppercase tracking-wide mb-3">{label}</p>
+        {sorted.map(([nombre, cant]) => (
+          <div key={nombre} className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-white/70 text-xs truncate">{nombre}</span>
+                <span className="text-white/40 text-xs ml-2 flex-shrink-0">{cant}</span>
+              </div>
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-violet-500/60 rounded-full" style={{ width: `${(cant / max) * 100}%` }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   const hora = new Date().getHours()
@@ -147,21 +186,51 @@ export default function AdminPanel() {
           {/* ESTADÍSTICAS */}
           {!loading && tab === 'stats' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'ATs registrados', value: stats.ats, icon: '👩‍⚕️', color: 'from-violet-600 to-purple-800' },
-                  { label: 'Mensajes enviados', value: stats.mensajes, icon: '💬', color: 'from-blue-600 to-blue-800' },
-                  { label: 'Búsquedas', value: stats.busquedas, icon: '📢', color: 'from-orange-500 to-orange-700' },
-                  { label: 'Sesiones agendadas', value: stats.sesiones, icon: '📅', color: 'from-green-600 to-green-800' },
-                ].map(s => (
-                  <div key={s.label} className={`bg-gradient-to-br ${s.color} rounded-2xl p-5`}>
-                    <div className="text-2xl mb-3">{s.icon}</div>
-                    <div className="text-3xl font-bold text-white">{s.value}</div>
-                    <div className="text-white/60 text-xs mt-1">{s.label}</div>
+              {/* Fila 1: usuarios */}
+              <div>
+                <p className="text-white/30 text-xs font-semibold uppercase tracking-wide mb-3">Usuarios</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-violet-600 to-purple-800 rounded-2xl p-5">
+                    <div className="text-2xl mb-3">👩‍⚕️</div>
+                    <div className="text-3xl font-bold text-white">{stats.ats}</div>
+                    <div className="text-white/60 text-xs mt-1">ATs registrados</div>
+                    <div className="text-white/40 text-xs mt-1">{ats.filter(a => a.activo).length} activos · {ats.filter(a => !a.activo).length} inactivos</div>
                   </div>
-                ))}
+                  <div className="bg-gradient-to-br from-pink-600 to-rose-800 rounded-2xl p-5">
+                    <div className="text-2xl mb-3">🧑</div>
+                    <div className="text-3xl font-bold text-white">{stats.pacientes}</div>
+                    <div className="text-white/60 text-xs mt-1">Pacientes registrados</div>
+                    <div className="text-white/40 text-xs mt-1">En búsqueda de AT</div>
+                  </div>
+                </div>
               </div>
 
+              {/* Fila 2: actividad */}
+              <div>
+                <p className="text-white/30 text-xs font-semibold uppercase tracking-wide mb-3">Actividad</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5">
+                    <div className="text-2xl mb-3">💬</div>
+                    <div className="text-3xl font-bold text-white">{stats.mensajes}</div>
+                    <div className="text-white/60 text-xs mt-1">Mensajes</div>
+                    <div className="text-white/40 text-xs mt-1">Recibidos por soporte</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-500 to-orange-700 rounded-2xl p-5">
+                    <div className="text-2xl mb-3">📢</div>
+                    <div className="text-3xl font-bold text-white">{stats.busquedas}</div>
+                    <div className="text-white/60 text-xs mt-1">Búsquedas</div>
+                    <div className="text-white/40 text-xs mt-1">{metricasBusquedas.activas} activas</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-2xl p-5">
+                    <div className="text-2xl mb-3">📅</div>
+                    <div className="text-3xl font-bold text-white">{stats.sesiones}</div>
+                    <div className="text-white/60 text-xs mt-1">Sesiones</div>
+                    <div className="text-white/40 text-xs mt-1">{sesiones.filter(s => s.estado === 'confirmada').length} confirmadas</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Últimos ATs */}
               <div className="bg-gray-900 rounded-2xl border border-white/5 p-5">
                 <h3 className="text-white font-semibold text-sm mb-4">Últimos ATs registrados</h3>
                 <div className="space-y-3">
@@ -183,13 +252,31 @@ export default function AdminPanel() {
                   ))}
                 </div>
               </div>
+
+              {/* Últimos mensajes recibidos */}
+              {mensajes.length > 0 && (
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                  <h3 className="text-white font-semibold text-sm mb-4">Últimos mensajes recibidos</h3>
+                  <div className="space-y-3">
+                    {mensajes.slice(0, 3).map(m => (
+                      <div key={m.id} className="bg-white/3 rounded-xl p-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-white/50 text-xs font-medium">Mensaje de soporte</span>
+                          <span className="text-white/20 text-xs">{new Date(m.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+                        </div>
+                        <p className="text-white/60 text-sm">{m.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* ATs */}
           {!loading && tab === 'ats' && (
             <div className="space-y-3">
-              <p className="text-white/30 text-xs">{ats.length} ATs registrados</p>
+              <p className="text-white/30 text-xs">{ats.length} ATs registrados · {ats.filter(a => a.activo).length} activos · {ats.filter(a => !a.activo).length} inactivos</p>
               {ats.map(at => (
                 <div key={at.id} className="bg-gray-900 rounded-2xl border border-white/5 p-5">
                   <div className="flex items-start justify-between">
@@ -223,35 +310,98 @@ export default function AdminPanel() {
             </div>
           )}
 
-          {/* BÚSQUEDAS */}
-          {!loading && tab === 'busquedas' && (
+          {/* PACIENTES */}
+          {!loading && tab === 'pacientes' && (
             <div className="space-y-3">
-              <p className="text-white/30 text-xs">{busquedas.length} búsquedas · {busquedas.filter(b => b.activa).length} activas</p>
-              {busquedas.map(b => (
-                <div key={b.id} className="bg-gray-900 rounded-2xl border border-white/5 p-5">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${b.activa ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-white/30'}`}>
-                      {b.activa ? '● Activa' : 'Cerrada'}
-                    </span>
-                    <span className="text-xs text-white/20">
-                      {new Date(b.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                  <p className="text-white/70 text-sm leading-relaxed mt-2">{b.descripcion}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {b.zona && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">📍 {b.zona}</span>}
-                    {b.obra_social && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">🏥 {b.obra_social}</span>}
-                    {b.especialidad && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">🎯 {b.especialidad}</span>}
-                  </div>
+              <p className="text-white/30 text-xs">{pacientes.length} pacientes registrados</p>
+              {pacientes.length === 0 ? (
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-8 text-center">
+                  <div className="text-4xl mb-3">🧑</div>
+                  <p className="text-white/50 font-medium text-sm">No hay pacientes registrados todavía.</p>
                 </div>
-              ))}
+              ) : (
+                pacientes.map(p => (
+                  <div key={p.id} className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-pink-600/20 flex items-center justify-center text-pink-300 font-bold text-sm">
+                        {p.nombre?.[0]}{p.apellido?.[0]}
+                      </div>
+                      <div>
+                        <p className="text-white font-semibold text-sm">{p.nombre} {p.apellido}</p>
+                        <p className="text-white/30 text-xs mt-0.5">
+                          Registrado el {new Date(p.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* BÚSQUEDAS con métricas */}
+          {!loading && tab === 'busquedas' && (
+            <div className="space-y-6">
+              {/* Resumen */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-4 text-center">
+                  <div className="text-2xl font-bold text-white">{busquedas.length}</div>
+                  <div className="text-white/40 text-xs mt-1">Total</div>
+                </div>
+                <div className="bg-gray-900 rounded-2xl border border-green-500/10 p-4 text-center">
+                  <div className="text-2xl font-bold text-green-400">{metricasBusquedas.activas}</div>
+                  <div className="text-white/40 text-xs mt-1">Activas</div>
+                </div>
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-4 text-center">
+                  <div className="text-2xl font-bold text-white/40">{metricasBusquedas.cerradas}</div>
+                  <div className="text-white/40 text-xs mt-1">Cerradas</div>
+                </div>
+              </div>
+
+              {/* Métricas */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                  <TopList data={metricasBusquedas.porZona} label="Por zona" />
+                </div>
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                  <TopList data={metricasBusquedas.porObraSocial} label="Por obra social" />
+                </div>
+                <div className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                  <TopList data={metricasBusquedas.porEspecialidad} label="Por especialidad" />
+                </div>
+              </div>
+
+              {/* Lista */}
+              <div>
+                <p className="text-white/30 text-xs mb-3">{busquedas.length} búsquedas · {metricasBusquedas.activas} activas</p>
+                <div className="space-y-3">
+                  {busquedas.map(b => (
+                    <div key={b.id} className="bg-gray-900 rounded-2xl border border-white/5 p-5">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${b.activa ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-white/30'}`}>
+                          {b.activa ? '● Activa' : 'Cerrada'}
+                        </span>
+                        <span className="text-xs text-white/20">
+                          {new Date(b.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <p className="text-white/70 text-sm leading-relaxed mt-2">{b.descripcion}</p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {b.zona && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">📍 {b.zona}</span>}
+                        {b.obra_social && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">🏥 {b.obra_social}</span>}
+                        {b.especialidad && <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-lg">🎯 {b.especialidad}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
           {/* SESIONES */}
           {!loading && tab === 'sesiones' && (
             <div className="space-y-3">
-              <p className="text-white/30 text-xs">{sesiones.length} sesiones totales</p>
+              <p className="text-white/30 text-xs">{sesiones.length} sesiones totales · {sesiones.filter(s => s.estado === 'confirmada').length} confirmadas · {sesiones.filter(s => s.estado === 'realizada').length} realizadas</p>
               {sesiones.map(s => (
                 <div key={s.id} className="bg-gray-900 rounded-2xl border border-white/5 p-5">
                   <div className="flex justify-between items-start">
@@ -274,15 +424,6 @@ export default function AdminPanel() {
                   {s.notas && <p className="text-white/30 text-xs mt-2 bg-white/3 rounded-lg px-3 py-2">{s.notas}</p>}
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* PACIENTES */}
-          {!loading && tab === 'pacientes' && (
-            <div className="bg-gray-900 rounded-2xl border border-white/5 p-8 text-center">
-              <div className="text-4xl mb-3">🔒</div>
-              <p className="text-white/50 font-medium text-sm">Datos de pacientes protegidos</p>
-              <p className="text-white/25 text-xs mt-1 max-w-xs mx-auto">Por privacidad, los datos personales de los pacientes no se muestran en el panel de admin.</p>
             </div>
           )}
 

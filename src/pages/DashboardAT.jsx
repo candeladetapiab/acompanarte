@@ -7,11 +7,14 @@ import { ZONAS_ALL, OBRAS_SOCIALES, ESPECIALIDADES } from '../lib/constants'
 import ComboInput from '../components/ComboInput'
 import toast from 'react-hot-toast'
 
+const ADMIN_EMAIL = 'candeladetapiab@gmail.com'
+
 const NAV_ITEMS = [
   { id: 'perfil',        icon: '👤', label: 'Mi perfil',     disponible: true  },
   { id: 'estadisticas',  icon: '📊', label: 'Estadísticas',  disponible: true  },
   { id: 'mensajes',      icon: '💬', label: 'Mensajes',       disponible: true  },
   { id: 'agenda',        icon: '📅', label: 'Agenda',         disponible: true  },
+  { id: 'soporte',       icon: '🆘', label: 'Soporte',        disponible: true  },
   { id: 'marketplace',   icon: '🛍️', label: 'Marketplace',   disponible: false },
   { id: 'facturacion',   icon: '🧾', label: 'Facturación',    disponible: false },
   { id: 'comunidad',     icon: '🤝', label: 'Comunidad',      disponible: false },
@@ -42,6 +45,8 @@ export default function DashboardAT() {
   const [modalSesion, setModalSesion] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [stats, setStats] = useState({ mensajes: 0, resenas: 0, calificacion: null })
+  const [adminUserId, setAdminUserId] = useState(null)
+  const [enviandoSoporte, setEnviandoSoporte] = useState(false)
 
   const { register, handleSubmit, setValue, getValues, watch, formState: { isSubmitting } } = useForm({
     defaultValues: {
@@ -55,6 +60,8 @@ export default function DashboardAT() {
     defaultValues: { paciente_id: '', fecha: '', hora: '', duracion_minutos: 60, modalidad: 'Presencial', estado: 'confirmada', notas: '' }
   })
 
+  const { register: regSoporte, handleSubmit: handleSoporte, reset: resetSoporte } = useForm()
+
   const fotoUrlPreview = watch('foto_url')
   const nombrePreview = watch('nombre')
   const apellidoPreview = watch('apellido')
@@ -65,7 +72,13 @@ export default function DashboardAT() {
     fetchMensajes()
     fetchSesiones()
     fetchStats()
+    fetchAdminId()
   }, [user])
+
+  async function fetchAdminId() {
+    const { data } = await supabase.from('profiles').select('id').eq('email', ADMIN_EMAIL).maybeSingle()
+    if (data) setAdminUserId(data.id)
+  }
 
   async function fetchPerfilAT() {
     const { data: atData } = await supabase.from('at_profiles').select('*').eq('id', user.id).maybeSingle()
@@ -215,6 +228,51 @@ export default function DashboardAT() {
     }
   }
 
+  async function onEnviarSoporte(data) {
+    if (!adminUserId) { toast.error('No se pudo encontrar el destinatario'); return }
+    setEnviandoSoporte(true)
+    try {
+      const atData = {
+        nombre: getValues('nombre'),
+        apellido: getValues('apellido'),
+        zona: getValues('zona'),
+        matricula: getValues('matricula'),
+        telefono: getValues('telefono'),
+        whatsapp: getValues('whatsapp'),
+        modalidad: getValues('modalidad'),
+      }
+      const contenido = `[SOPORTE AT]
+Nombre: ${atData.nombre} ${atData.apellido}
+Email: ${user.email}
+Rol: Acompañante Terapéutico
+Matrícula: ${atData.matricula || 'No especificada'}
+Zona: ${atData.zona || 'No especificada'}
+Modalidad: ${atData.modalidad || 'No especificada'}
+Teléfono: ${atData.telefono || 'No especificado'}
+WhatsApp: ${atData.whatsapp || 'No especificado'}
+Obras sociales: ${obrasSelec.join(', ') || 'No especificadas'}
+Especialidades: ${espSelec.join(', ') || 'No especificadas'}
+
+Asunto: ${data.asunto}
+
+Mensaje:
+${data.mensaje}`
+
+      const { error } = await supabase.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: adminUserId,
+        content: contenido,
+      })
+      if (error) throw error
+      toast.success('Mensaje enviado al soporte')
+      resetSoporte()
+    } catch (err) {
+      toast.error(err.message ?? 'No se pudo enviar el mensaje')
+    } finally {
+      setEnviandoSoporte(false)
+    }
+  }
+
   async function cambiarEstadoSesion(id, estado) {
     const { error } = await supabase.from('sessions').update({ estado }).eq('id', id)
     if (error) { toast.error('No se pudo actualizar'); return }
@@ -239,7 +297,6 @@ export default function DashboardAT() {
         <div className="fixed inset-0 bg-black/40 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* SIDEBAR */}
       <aside className={`fixed top-0 left-0 h-full w-64 bg-[#2D1F45] z-30 flex flex-col transition-transform duration-300
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
 
@@ -294,7 +351,6 @@ export default function DashboardAT() {
         </div>
       </aside>
 
-      {/* CONTENIDO */}
       <main className="flex-1 min-w-0">
 
         <div className="lg:hidden flex items-center justify-between px-4 py-4 bg-[#2D1F45]">
@@ -310,7 +366,6 @@ export default function DashboardAT() {
             <p className="text-[#2D1F45]/40 text-sm mt-1">{NAV_ITEMS.find(n => n.id === tab)?.label}</p>
           </div>
 
-          {/* PERFIL */}
           {tab === 'perfil' && (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
@@ -327,7 +382,6 @@ export default function DashboardAT() {
                   <p className="text-xs text-[#2D1F45]/30 mt-1">JPG, PNG o WebP · Máx 2MB</p>
                 </div>
               </div>
-
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Nombre</label><input {...register('nombre', { required: true })} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" /></div>
@@ -338,20 +392,9 @@ export default function DashboardAT() {
                   <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Teléfono</label><input {...register('telefono')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" /></div>
                 </div>
               </div>
-
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Zona de trabajo</label>
-                  <ComboInput listId="zona-dashboard-at" options={ZONAS_ALL} placeholder="Escribí o elegí: barrio, ciudad, provincia..." {...register('zona')} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Modalidad</label>
-                  <select {...register('modalidad')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40">
-                    <option value="Presencial">Presencial</option>
-                    <option value="Virtual">Virtual</option>
-                    <option value="Ambas">Ambas</option>
-                  </select>
-                </div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Zona de trabajo</label><ComboInput listId="zona-dashboard-at" options={ZONAS_ALL} placeholder="Escribí o elegí: barrio, ciudad, provincia..." {...register('zona')} /></div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Modalidad</label><select {...register('modalidad')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40"><option value="Presencial">Presencial</option><option value="Virtual">Virtual</option><option value="Ambas">Ambas</option></select></div>
                 <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Precio</label><input {...register('precio')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" placeholder="Ej: $8000 o A convenir" /></div>
                 <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Descripción</label><textarea {...register('descripcion')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40 resize-none" rows={4} placeholder="Contá tu experiencia, enfoque y lo que ofrecés..." /></div>
                 <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Experiencia</label><textarea {...register('experiencia')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40 resize-none" rows={3} placeholder="Años de experiencia o trayectoria." /></div>
@@ -364,39 +407,21 @@ export default function DashboardAT() {
                   <label htmlFor="activo" className="text-sm text-[#2D1F45]/60">Perfil activo (visible en búsquedas)</label>
                 </div>
               </div>
-
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <label className="text-xs font-semibold text-[#2D1F45]/50 mb-3 block">Obras sociales que atendés</label>
-                <div className="flex flex-wrap gap-2">
-                  {OBRAS_SOCIALES.map(o => (
-                    <button key={o} type="button" onClick={() => toggleItem(obrasSelec, setObrasSelec, o)}
-                      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${obrasSelec.includes(o) ? 'bg-[#7C5C9E] text-white border-[#7C5C9E]' : 'border-gray-200 text-[#2D1F45]/60 hover:border-[#C9A8E8]'}`}>{o}</button>
-                  ))}
-                </div>
+                <div className="flex flex-wrap gap-2">{OBRAS_SOCIALES.map(o => (<button key={o} type="button" onClick={() => toggleItem(obrasSelec, setObrasSelec, o)} className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${obrasSelec.includes(o) ? 'bg-[#7C5C9E] text-white border-[#7C5C9E]' : 'border-gray-200 text-[#2D1F45]/60 hover:border-[#C9A8E8]'}`}>{o}</button>))}</div>
               </div>
-
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <label className="text-xs font-semibold text-[#2D1F45]/50 mb-3 block">Especialidades</label>
-                <div className="flex flex-wrap gap-2">
-                  {ESPECIALIDADES.map(e => (
-                    <button key={e} type="button" onClick={() => toggleItem(espSelec, setEspSelec, e)}
-                      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${espSelec.includes(e) ? 'bg-[#E8A87C] text-white border-[#E8A87C]' : 'border-gray-200 text-[#2D1F45]/60 hover:border-[#E8A87C]'}`}>{e}</button>
-                  ))}
-                </div>
+                <div className="flex flex-wrap gap-2">{ESPECIALIDADES.map(e => (<button key={e} type="button" onClick={() => toggleItem(espSelec, setEspSelec, e)} className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${espSelec.includes(e) ? 'bg-[#E8A87C] text-white border-[#E8A87C]' : 'border-gray-200 text-[#2D1F45]/60 hover:border-[#E8A87C]'}`}>{e}</button>))}</div>
               </div>
-
               <div className="space-y-2">
-                <button type="submit" disabled={isSubmitting} className="w-full bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">
-                  {isSubmitting ? 'Guardando...' : 'Guardar perfil'}
-                </button>
-                {saveFeedback && (
-                  <p className={`text-sm font-medium ${saveFeedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{saveFeedback.message}</p>
-                )}
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">{isSubmitting ? 'Guardando...' : 'Guardar perfil'}</button>
+                {saveFeedback && (<p className={`text-sm font-medium ${saveFeedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>{saveFeedback.message}</p>)}
               </div>
             </form>
           )}
 
-          {/* ESTADÍSTICAS */}
           {tab === 'estadisticas' && (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -419,7 +444,6 @@ export default function DashboardAT() {
             </div>
           )}
 
-          {/* MENSAJES */}
           {tab === 'mensajes' && (
             <div className="space-y-3">
               {mensajes.length === 0 ? (
@@ -433,14 +457,10 @@ export default function DashboardAT() {
                   <div key={m.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C9A8E8] to-[#7C5C9E] flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                          {(m._senderNombre?.[0] ?? 'P').toUpperCase()}
-                        </div>
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C9A8E8] to-[#7C5C9E] flex items-center justify-center text-white font-bold text-xs flex-shrink-0">{(m._senderNombre?.[0] ?? 'P').toUpperCase()}</div>
                         <span className="font-semibold text-sm text-[#2D1F45]">{m._senderNombre}</span>
                       </div>
-                      <span className="text-xs text-[#2D1F45]/30">
-                        {new Date(m.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-                      </span>
+                      <span className="text-xs text-[#2D1F45]/30">{new Date(m.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
                     </div>
                     <p className="text-[#2D1F45]/70 text-sm leading-relaxed whitespace-pre-line bg-gray-50 rounded-xl px-4 py-3">{m.content}</p>
                   </div>
@@ -449,12 +469,9 @@ export default function DashboardAT() {
             </div>
           )}
 
-          {/* AGENDA */}
           {tab === 'agenda' && (
             <div className="space-y-4">
-              <button onClick={() => setModalSesion(true)} className="w-full bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">
-                + Nueva sesión
-              </button>
+              <button onClick={() => setModalSesion(true)} className="w-full bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">+ Nueva sesión</button>
               {sesiones.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
                   <div className="text-4xl mb-3">📅</div>
@@ -467,27 +484,64 @@ export default function DashboardAT() {
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <p className="font-semibold text-sm text-[#2D1F45]">{s.paciente_nombre}</p>
-                        <p className="text-xs text-[#2D1F45]/40 mt-0.5">
-                          {new Date(s.fecha + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                          {' · '}{s.hora?.slice(0, 5)} hs · {s.duracion_minutos} min · {s.modalidad}
-                        </p>
+                        <p className="text-xs text-[#2D1F45]/40 mt-0.5">{new Date(s.fecha + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}{' · '}{s.hora?.slice(0, 5)} hs · {s.duracion_minutos} min · {s.modalidad}</p>
                       </div>
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ESTADO_COLORS[s.estado] ?? 'bg-gray-100 text-gray-500'}`}>
-                        {s.estado}
-                      </span>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ESTADO_COLORS[s.estado] ?? 'bg-gray-100 text-gray-500'}`}>{s.estado}</span>
                     </div>
                     {s.notas && <p className="text-xs text-[#2D1F45]/50 bg-gray-50 rounded-xl px-3 py-2 mt-2">{s.notas}</p>}
                     <div className="flex gap-2 mt-3 flex-wrap">
                       {['confirmada', 'realizada', 'cancelada'].map(est => s.estado !== est && (
-                        <button key={est} onClick={() => cambiarEstadoSesion(s.id, est)}
-                          className="text-xs text-[#2D1F45]/40 hover:text-[#7C5C9E] transition-colors border border-gray-100 rounded-lg px-2 py-1">
-                          Marcar como {est}
-                        </button>
+                        <button key={est} onClick={() => cambiarEstadoSesion(s.id, est)} className="text-xs text-[#2D1F45]/40 hover:text-[#7C5C9E] transition-colors border border-gray-100 rounded-lg px-2 py-1">Marcar como {est}</button>
                       ))}
                     </div>
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* SOPORTE */}
+          {tab === 'soporte' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-[#F5F0FA] flex items-center justify-center text-xl">🆘</div>
+                  <div>
+                    <p className="font-bold text-[#2D1F45] text-sm">Contactar soporte</p>
+                    <p className="text-[#2D1F45]/40 text-xs">Te respondemos a la brevedad</p>
+                  </div>
+                </div>
+                <form onSubmit={handleSoporte(onEnviarSoporte)} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Asunto</label>
+                    <input {...regSoporte('asunto', { required: true })}
+                      placeholder="¿En qué te podemos ayudar?"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Mensaje</label>
+                    <textarea {...regSoporte('mensaje', { required: true })}
+                      placeholder="Contanos tu consulta o problema con el mayor detalle posible..."
+                      rows={5}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40 resize-none" />
+                  </div>
+                  <div className="bg-[#F5F0FA] rounded-xl p-4 text-xs text-[#2D1F45]/50 space-y-1">
+                    <p className="font-semibold text-[#2D1F45]/70 mb-2">Datos que se enviarán junto con tu mensaje:</p>
+                    <p>👤 Nombre: {nombrePreview} {apellidoPreview}</p>
+                    <p>📧 Email: {user?.email}</p>
+                    <p>🩺 Rol: Acompañante Terapéutico</p>
+                    <p>📋 Matrícula: {getValues('matricula') || 'No especificada'}</p>
+                    <p>📍 Zona: {getValues('zona') || 'No especificada'}</p>
+                    <p>📱 WhatsApp: {getValues('whatsapp') || 'No especificado'}</p>
+                    {obrasSelec.length > 0 && <p>🏥 Obras sociales: {obrasSelec.join(', ')}</p>}
+                    {espSelec.length > 0 && <p>🎯 Especialidades: {espSelec.join(', ')}</p>}
+                  </div>
+                  <button type="submit" disabled={enviandoSoporte}
+                    className="w-full bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">
+                    {enviandoSoporte ? 'Enviando...' : 'Enviar mensaje'}
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 
@@ -499,7 +553,6 @@ export default function DashboardAT() {
         </div>
       </main>
 
-      {/* MODAL NUEVA SESIÓN */}
       {modalSesion && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
@@ -521,56 +574,18 @@ export default function DashboardAT() {
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Fecha</label>
-                  <input type="date" {...regSesion('fecha', { required: true })} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" />
-                  {errSesion.fecha && <p className="text-xs text-red-500 mt-1">Requerido</p>}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Hora</label>
-                  <input type="time" {...regSesion('hora', { required: true })} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" />
-                  {errSesion.hora && <p className="text-xs text-red-500 mt-1">Requerido</p>}
-                </div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Fecha</label><input type="date" {...regSesion('fecha', { required: true })} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" />{errSesion.fecha && <p className="text-xs text-red-500 mt-1">Requerido</p>}</div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Hora</label><input type="time" {...regSesion('hora', { required: true })} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40" />{errSesion.hora && <p className="text-xs text-red-500 mt-1">Requerido</p>}</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Duración (min)</label>
-                  <select {...regSesion('duracion_minutos')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40">
-                    <option value={30}>30 min</option>
-                    <option value={45}>45 min</option>
-                    <option value={60}>60 min</option>
-                    <option value={90}>90 min</option>
-                    <option value={120}>120 min</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Modalidad</label>
-                  <select {...regSesion('modalidad')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40">
-                    <option value="Presencial">Presencial</option>
-                    <option value="Virtual">Virtual</option>
-                  </select>
-                </div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Duración (min)</label><select {...regSesion('duracion_minutos')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40"><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option><option value={90}>90 min</option><option value={120}>120 min</option></select></div>
+                <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Modalidad</label><select {...regSesion('modalidad')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40"><option value="Presencial">Presencial</option><option value="Virtual">Virtual</option></select></div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Estado</label>
-                <select {...regSesion('estado')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40">
-                  <option value="confirmada">Confirmada</option>
-                  <option value="pendiente">Pendiente</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Notas (opcional)</label>
-                <textarea {...regSesion('notas')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40 resize-none" rows={3} placeholder="Observaciones, dirección, link de videollamada..." />
-              </div>
+              <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Estado</label><select {...regSesion('estado')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40"><option value="confirmada">Confirmada</option><option value="pendiente">Pendiente</option></select></div>
+              <div><label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Notas (opcional)</label><textarea {...regSesion('notas')} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#C9A8E8]/40 resize-none" rows={3} placeholder="Observaciones, dirección, link de videollamada..." /></div>
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => { setModalSesion(false); resetSesion() }}
-                  className="flex-1 border border-gray-200 text-[#2D1F45]/60 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={guardandoSesion}
-                  className="flex-1 bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3 rounded-2xl transition-colors">
-                  {guardandoSesion ? 'Guardando...' : 'Guardar sesión'}
-                </button>
+                <button type="button" onClick={() => { setModalSesion(false); resetSesion() }} className="flex-1 border border-gray-200 text-[#2D1F45]/60 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button type="submit" disabled={guardandoSesion} className="flex-1 bg-[#7C5C9E] hover:bg-[#6b4f8a] text-white font-semibold py-3 rounded-2xl transition-colors">{guardandoSesion ? 'Guardando...' : 'Guardar sesión'}</button>
               </div>
             </form>
           </div>

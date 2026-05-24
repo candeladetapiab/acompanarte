@@ -7,10 +7,13 @@ import { OBRAS_SOCIALES, ZONAS_ALL } from '../lib/constants'
 import ComboInput from '../components/ComboInput'
 import toast from 'react-hot-toast'
 
+const ADMIN_ID = 'candeladetapiab@gmail.com'
+
 const NAV_ITEMS = [
   { id: 'perfil',        icon: '👤', label: 'Mi perfil',      disponible: true  },
   { id: 'busquedas',     icon: '📢', label: 'Mis búsquedas',  disponible: true  },
   { id: 'mensajes',      icon: '💬', label: 'Mensajes',        disponible: true  },
+  { id: 'soporte',       icon: '🆘', label: 'Soporte',         disponible: true  },
   { id: 'favoritos',     icon: '❤️', label: 'Favoritos',      disponible: false },
   { id: 'configuracion', icon: '⚙️', label: 'Configuración',  disponible: false },
 ]
@@ -31,8 +34,11 @@ export default function DashboardPaciente() {
   const [mensajesEnviados, setMensajesEnviados] = useState([])
   const [tab, setTab] = useState('perfil')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [enviandoSoporte, setEnviandoSoporte] = useState(false)
+  const [adminUserId, setAdminUserId] = useState(null)
 
   const { register, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm()
+  const { register: regSoporte, handleSubmit: handleSoporte, reset: resetSoporte, formState: { isSubmitting: enviando } } = useForm()
 
   const nombrePreview = watch('nombre')
   const apellidoPreview = watch('apellido')
@@ -40,12 +46,18 @@ export default function DashboardPaciente() {
   useEffect(() => {
     if (!user) return
     fetchDatos()
+    fetchAdminId()
     setValue('nombre', profile?.nombre ?? '')
     setValue('apellido', profile?.apellido ?? '')
     setValue('obra_social', profile?.obra_social ?? '')
     setValue('zona', profile?.zona ?? '')
     setValue('telefono', profile?.telefono ?? '')
   }, [user, profile])
+
+  async function fetchAdminId() {
+    const { data } = await supabase.from('profiles').select('id').eq('email', ADMIN_ID).maybeSingle()
+    if (data) setAdminUserId(data.id)
+  }
 
   async function fetchDatos() {
     const [{ data: b }, { data: m }] = await Promise.all([
@@ -69,6 +81,38 @@ export default function DashboardPaciente() {
       .eq('id', user.id)
     if (error) { toast.error(error.message); return }
     toast.success('Perfil actualizado')
+  }
+
+  async function onEnviarSoporte(data) {
+    if (!adminUserId) { toast.error('No se pudo encontrar el destinatario'); return }
+    setEnviandoSoporte(true)
+    try {
+      const contenido = `[SOPORTE PACIENTE]
+Nombre: ${profile?.nombre ?? ''} ${profile?.apellido ?? ''}
+Email: ${user.email}
+Rol: Paciente
+Zona: ${profile?.zona ?? 'No especificada'}
+Obra social: ${profile?.obra_social ?? 'No especificada'}
+Teléfono: ${profile?.telefono ?? 'No especificado'}
+
+Asunto: ${data.asunto}
+
+Mensaje:
+${data.mensaje}`
+
+      const { error } = await supabase.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: adminUserId,
+        content: contenido,
+      })
+      if (error) throw error
+      toast.success('Mensaje enviado al soporte')
+      resetSoporte()
+    } catch (err) {
+      toast.error(err.message ?? 'No se pudo enviar el mensaje')
+    } finally {
+      setEnviandoSoporte(false)
+    }
   }
 
   async function cerrarBusqueda(id) {
@@ -270,6 +314,49 @@ export default function DashboardPaciente() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* SOPORTE */}
+          {tab === 'soporte' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-[#F5F0FA] flex items-center justify-center text-xl">🆘</div>
+                  <div>
+                    <p className="font-bold text-[#2D1F45] text-sm">Contactar soporte</p>
+                    <p className="text-[#2D1F45]/40 text-xs">Te respondemos a la brevedad</p>
+                  </div>
+                </div>
+                <form onSubmit={handleSoporte(onEnviarSoporte)} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Asunto</label>
+                    <input {...regSoporte('asunto', { required: true })}
+                      placeholder="¿En qué te podemos ayudar?"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#E8A87C]/40" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#2D1F45]/50 mb-1.5 block">Mensaje</label>
+                    <textarea {...regSoporte('mensaje', { required: true })}
+                      placeholder="Contanos tu consulta o problema con el mayor detalle posible..."
+                      rows={5}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-[#2D1F45] focus:outline-none focus:ring-2 focus:ring-[#E8A87C]/40 resize-none" />
+                  </div>
+                  <div className="bg-[#F5F0FA] rounded-xl p-4 text-xs text-[#2D1F45]/50 space-y-1">
+                    <p className="font-semibold text-[#2D1F45]/70 mb-2">Datos que se enviarán junto con tu mensaje:</p>
+                    <p>👤 Nombre: {profile?.nombre} {profile?.apellido}</p>
+                    <p>📧 Email: {user?.email}</p>
+                    <p>🧑 Rol: Paciente</p>
+                    {profile?.zona && <p>📍 Zona: {profile.zona}</p>}
+                    {profile?.obra_social && <p>🏥 Obra social: {profile.obra_social}</p>}
+                    {profile?.telefono && <p>📱 Teléfono: {profile.telefono}</p>}
+                  </div>
+                  <button type="submit" disabled={enviandoSoporte}
+                    className="w-full bg-[#E8A87C] hover:bg-[#d4956a] text-white font-semibold py-3.5 rounded-2xl transition-colors shadow-sm">
+                    {enviandoSoporte ? 'Enviando...' : 'Enviar mensaje'}
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 

@@ -46,7 +46,7 @@ export default function DashboardAT() {
   const [modalSesion, setModalSesion] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [stats, setStats] = useState({ mensajes: 0, resenas: 0, calificacion: null })
-  const [adminUserId, setAdminUserId] = useState("146dced0-5554-4043-b6ae-ad03e3a7f803")
+  const [adminUserId, setAdminUserId] = useState(null)
   const [enviandoSoporte, setEnviandoSoporte] = useState(false)
 
   const { register, handleSubmit, setValue, getValues, watch, formState: { isSubmitting } } = useForm({
@@ -77,7 +77,7 @@ export default function DashboardAT() {
   }, [user])
 
   async function fetchAdminId() {
-    const { data } = await supabase.from('profiles').select('id').eq('id', '146dced0-5554-4043-b6ae-ad03e3a7f803').maybeSingle()
+    const { data } = await supabase.from('profiles').select('id').eq('email', ADMIN_EMAIL).maybeSingle()
     if (data) setAdminUserId(data.id)
   }
 
@@ -445,30 +445,7 @@ ${data.mensaje}`
             </div>
           )}
 
-          {tab === 'mensajes' && (
-            <div className="space-y-3">
-              {mensajes.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                  <div className="text-4xl mb-3">💬</div>
-                  <p className="text-[#2D1F45]/50 font-medium text-sm">No tenés mensajes todavía.</p>
-                  <p className="text-[#2D1F45]/35 text-xs mt-1">Cuando un paciente te contacte, aparecerá acá.</p>
-                </div>
-              ) : (
-                mensajes.map(m => (
-                  <div key={m.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C9A8E8] to-[#7C5C9E] flex items-center justify-center text-white font-bold text-xs flex-shrink-0">{(m._senderNombre?.[0] ?? 'P').toUpperCase()}</div>
-                        <span className="font-semibold text-sm text-[#2D1F45]">{m._senderNombre}</span>
-                      </div>
-                      <span className="text-xs text-[#2D1F45]/30">{new Date(m.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
-                    </div>
-                    <p className="text-[#2D1F45]/70 text-sm leading-relaxed whitespace-pre-line bg-gray-50 rounded-xl px-4 py-3">{m.content}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+          {tab === 'mensajes' && <MensajesTab />}
 
           {tab === 'agenda' && (
             <div className="space-y-4">
@@ -595,7 +572,3 @@ ${data.mensaje}`
     </div>
   )
 }
-
-
-
-

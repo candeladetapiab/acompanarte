@@ -53,7 +53,7 @@ function RootPage() {
     )
   }
   if (user && profile) {
-    return <Navigate to={profile.rol === 'at' ? '/panel-at' : '/panel-paciente'} replace />
+    return <Navigate to={profile?.email === 'candeladetapiab@gmail.com' ? '/admin' : profile?.rol === 'at' ? '/panel-at' : '/panel-paciente'} replace />
   }
   return <Home />
 }

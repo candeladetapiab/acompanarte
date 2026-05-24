@@ -20,6 +20,7 @@ import BusquedasActivas from './pages/BusquedasActivas'
 import Mensajes from './pages/Mensajes'
 import ChatConversacion from './pages/ChatConversacion'
 import NotificadorMensajes from './components/NotificadorMensajes'
+import AdminPanel from './pages/AdminPanel'
 import ATelier from './pages/ATelier'
 
 const ROUTES_SIN_NAVBAR = [
@@ -111,6 +112,7 @@ function AppRoutes() {
         {/* Redirects */}
         <Route path="/home/at"       element={<Navigate to="/panel-at" replace />} />
         <Route path="/home/paciente" element={<Navigate to="/panel-paciente" replace />} />
+        <Route path="/admin" element={<AdminPanel />} />
         <Route path="/registro"      element={<Navigate to="/onboarding" replace />} />
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

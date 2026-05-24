@@ -286,7 +286,7 @@ export default function DashboardAT() {
         </nav>
 
         <div className="px-6 py-4 border-t border-white/10">
-          <p className="text-white/20 text-xs">AcompaÃ±arTe Â· v0.1</p>
+          <p className="text-white/20 text-xs">AcompañarTe · v0.1</p>{user?.email === 'candeladetapiab@gmail.com' && <a href="/admin" className="text-violet-400 text-xs mt-1 block">?? Admin</a>}
         </div>
       </aside>
 

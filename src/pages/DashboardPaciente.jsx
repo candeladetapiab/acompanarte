@@ -35,7 +35,7 @@ export default function DashboardPaciente() {
   const [tab, setTab] = useState('perfil')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [enviandoSoporte, setEnviandoSoporte] = useState(false)
-  const [adminUserId, setAdminUserId] = useState(null)
+  const [adminUserId, setAdminUserId] = useState("146dced0-5554-4043-b6ae-ad03e3a7f803")
 
   const { register, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm()
   const { register: regSoporte, handleSubmit: handleSoporte, reset: resetSoporte, formState: { isSubmitting: enviando } } = useForm()
@@ -368,4 +368,5 @@ ${data.mensaje}`
     </div>
   )
 }
+
 

@@ -45,7 +45,7 @@ export default function DashboardAT() {
   const [modalSesion, setModalSesion] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [stats, setStats] = useState({ mensajes: 0, resenas: 0, calificacion: null })
-  const [adminUserId, setAdminUserId] = useState(null)
+  const [adminUserId, setAdminUserId] = useState("146dced0-5554-4043-b6ae-ad03e3a7f803")
   const [enviandoSoporte, setEnviandoSoporte] = useState(false)
 
   const { register, handleSubmit, setValue, getValues, watch, formState: { isSubmitting } } = useForm({
@@ -594,4 +594,5 @@ ${data.mensaje}`
     </div>
   )
 }
+
 

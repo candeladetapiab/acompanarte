@@ -76,7 +76,7 @@ export default function DashboardAT() {
   }, [user])
 
   async function fetchAdminId() {
-    const { data } = await supabase.from('profiles').select('id').eq('email', ADMIN_EMAIL).maybeSingle()
+    const { data } = await supabase.from('profiles').select('id').eq('id', '146dced0-5554-4043-b6ae-ad03e3a7f803').maybeSingle()
     if (data) setAdminUserId(data.id)
   }
 
@@ -594,3 +594,4 @@ ${data.mensaje}`
     </div>
   )
 }
+

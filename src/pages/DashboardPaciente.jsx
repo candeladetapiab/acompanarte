@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
+import MensajesTab from '../components/MensajesTab'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/useAuth'
 import { OBRAS_SOCIALES, ZONAS_ALL } from '../lib/constants'
@@ -288,7 +289,9 @@ ${data.mensaje}`
           )}
 
           {/* MENSAJES */}
-          {tab === 'mensajes' && (
+          {tab === 'mensajes' && <MensajesTab />}
+
+          {tab === 'mensajes_OLD' && (
             <div className="space-y-3">
               {mensajesEnviados.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm text-center py-12 px-6">
@@ -368,5 +371,7 @@ ${data.mensaje}`
     </div>
   )
 }
+
+
 
 

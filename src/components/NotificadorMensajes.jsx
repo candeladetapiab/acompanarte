@@ -1,1 +1,1 @@
-﻿export default function NotificadorMensajes() { return null; }
+export default function NotificadorMensajes() { return null }

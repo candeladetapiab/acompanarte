@@ -5,59 +5,37 @@ import { useAuth } from '../context/useAuth'
 import toast from 'react-hot-toast'
 
 export default function ChatConversacion() {
-  const { userId } = useParams()
+  const { otroId } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [mensajes, setMensajes] = useState([])
   const [otroUsuario, setOtroUsuario] = useState(null)
-  const [otroUsuarioExtra, setOtroUsuarioExtra] = useState(null)
   const [loading, setLoading] = useState(true)
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [mostrarPerfil, setMostrarPerfil] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
   useEffect(() => {
-    if (!user || !userId) return
+    if (!user || !otroId) return
     fetchDatos()
 
-    // Marcar como leídos
-    supabase
-      .from('messages')
-      .update({ leido: true })
-      .eq('receiver_id', user.id)
-      .eq('sender_id', userId)
-      .eq('leido', false)
-      .then(() => {})
-
-    // Suscripción en tiempo real
     const channel = supabase
-      .channel(`chat-${user.id}-${userId}`)
+      .channel(`chat-${user.id}-${otroId}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${user.id}`,
       }, payload => {
-        if (payload.new.sender_id === userId) {
+        if (payload.new.sender_id === otroId) {
           setMensajes(prev => [...prev, payload.new])
-          // Marcar como leído inmediatamente
-          supabase.from('messages').update({ leido: true }).eq('id', payload.new.id).then(() => {})
         }
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages',
-        filter: `sender_id=eq.${user.id}`,
-      }, payload => {
-        setMensajes(prev => prev.map(m => m.id === payload.new.id ? payload.new : m))
       })
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [user, userId])
+  }, [user, otroId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -66,20 +44,30 @@ export default function ChatConversacion() {
   async function fetchDatos() {
     setLoading(true)
 
-    const [{ data: msgs }, { data: perfil }] = await Promise.all([
+    // Traer mensajes en dos queries simples y combinar
+    const [{ data: enviados }, { data: recibidos }, { data: perfil }] = await Promise.all([
       supabase
         .from('messages')
         .select('*')
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
-        .order('created_at', { ascending: true }),
+        .eq('sender_id', user.id)
+        .eq('receiver_id', otroId),
+      supabase
+        .from('messages')
+        .select('*')
+        .eq('sender_id', otroId)
+        .eq('receiver_id', user.id),
       supabase
         .from('at_profiles')
-        .select('*')
-        .eq('id', userId)
+        .select('id, nombre, apellido, foto_url')
+        .eq('id', otroId)
         .maybeSingle(),
     ])
 
-    setMensajes(msgs ?? [])
+    // Combinar y ordenar por fecha
+    const todos = [...(enviados ?? []), ...(recibidos ?? [])]
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+
+    setMensajes(todos)
 
     if (perfil) {
       setOtroUsuario(perfil)
@@ -87,8 +75,8 @@ export default function ChatConversacion() {
       // Buscar en profiles (pacientes)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*')
-        .eq('id', userId)
+        .select('id, nombre, apellido')
+        .eq('id', otroId)
         .maybeSingle()
       setOtroUsuario(profileData)
     }
@@ -103,7 +91,7 @@ export default function ChatConversacion() {
 
     const { data, error } = await supabase
       .from('messages')
-      .insert({ sender_id: user.id, receiver_id: userId, content: texto.trim() })
+      .insert({ sender_id: user.id, receiver_id: otroId, content: texto.trim() })
       .select()
       .single()
 
@@ -137,7 +125,6 @@ export default function ChatConversacion() {
     return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
   }
 
-  // Agrupar mensajes por fecha
   const mensajesAgrupados = []
   let ultimaFecha = null
   mensajes.forEach(m => {
@@ -149,7 +136,6 @@ export default function ChatConversacion() {
     mensajesAgrupados.push({ tipo: 'mensaje', ...m })
   })
 
-  // Último mensaje enviado por mí
   const ultimoMioId = [...mensajes].reverse().find(m => m.sender_id === user.id)?.id
 
   return (
@@ -159,25 +145,20 @@ export default function ChatConversacion() {
       <div className="bg-gradient-to-r from-[#2D1F45] to-[#7C5C9E] px-4 pt-10 pb-4 flex-shrink-0">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <button
-            onClick={() => navigate('/mensajes')}
+            onClick={() => navigate(-1)}
             className="text-white/60 hover:text-white transition-colors mr-1 text-xl"
           >
             ←
           </button>
-          <button
-            className="flex items-center gap-3 flex-1 text-left"
-            onClick={() => setMostrarPerfil(true)}
-          >
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 overflow-hidden">
-              {otroUsuario?.foto_url
-                ? <img src={otroUsuario.foto_url} alt="" className="w-full h-full object-cover" />
-                : (nombreOtro?.[0] ?? '?').toUpperCase()}
-            </div>
-            <div>
-              <p className="text-white font-semibold text-sm">{nombreOtro}</p>
-              <p className="text-white/40 text-xs">Toca para ver perfil</p>
-            </div>
-          </button>
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 overflow-hidden">
+            {otroUsuario?.foto_url
+              ? <img src={otroUsuario.foto_url} alt="" className="w-full h-full object-cover" />
+              : (nombreOtro?.[0] ?? '?').toUpperCase()}
+          </div>
+          <div>
+            <p className="text-white font-semibold text-sm">{nombreOtro}</p>
+            <p className="text-white/40 text-xs">Conversación</p>
+          </div>
         </div>
       </div>
 
@@ -271,81 +252,6 @@ export default function ChatConversacion() {
           </form>
         </div>
       </div>
-
-      {/* Modal perfil */}
-      {mostrarPerfil && otroUsuario && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setMostrarPerfil(false)}>
-          <div className="bg-white rounded-t-3xl w-full max-w-2xl p-6 pb-10" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="font-bold text-[#2D1F45] text-lg">Perfil</h3>
-              <button onClick={() => setMostrarPerfil(false)} className="text-[#2D1F45]/40 text-xl hover:text-[#2D1F45]">✕</button>
-            </div>
-            <div className="flex items-center gap-4 mb-5">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#C9A8E8] to-[#7C5C9E] flex items-center justify-center text-white font-bold text-2xl overflow-hidden flex-shrink-0">
-                {otroUsuario.foto_url
-                  ? <img src={otroUsuario.foto_url} alt="" className="w-full h-full object-cover" />
-                  : (nombreOtro?.[0] ?? '?').toUpperCase()}
-              </div>
-              <div>
-                <p className="font-bold text-[#2D1F45] text-lg">{nombreOtro}</p>
-                {otroUsuario.rol && <p className="text-[#2D1F45]/50 text-sm capitalize">{otroUsuario.rol === 'at' ? 'Acompañante Terapéutico' : 'Paciente'}</p>}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {otroUsuario.zona && (
-                <div className="flex items-center gap-2 text-sm text-[#2D1F45]/70">
-                  <span>📍</span><span>{otroUsuario.zona}</span>
-                </div>
-              )}
-              {otroUsuario.modalidad && (
-                <div className="flex items-center gap-2 text-sm text-[#2D1F45]/70">
-                  <span>🩺</span><span>{otroUsuario.modalidad}</span>
-                </div>
-              )}
-              {otroUsuario.matricula && (
-                <div className="flex items-center gap-2 text-sm text-[#2D1F45]/70">
-                  <span>📋</span><span>Matrícula: {otroUsuario.matricula}</span>
-                </div>
-              )}
-              {otroUsuario.whatsapp && (
-                <div className="flex items-center gap-2 text-sm text-[#2D1F45]/70">
-                  <span>📱</span><span>{otroUsuario.whatsapp}</span>
-                </div>
-              )}
-              {otroUsuario.email_contacto && (
-                <div className="flex items-center gap-2 text-sm text-[#2D1F45]/70">
-                  <span>📧</span><span>{otroUsuario.email_contacto}</span>
-                </div>
-              )}
-              {otroUsuario.especialidades?.length > 0 && (
-                <div className="flex items-start gap-2 text-sm text-[#2D1F45]/70">
-                  <span>🎯</span>
-                  <div className="flex flex-wrap gap-1">
-                    {otroUsuario.especialidades.map(e => (
-                      <span key={e} className="bg-[#F5F0FA] text-[#7C5C9E] text-xs px-2 py-0.5 rounded-full">{e}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {otroUsuario.obras_sociales?.length > 0 && (
-                <div className="flex items-start gap-2 text-sm text-[#2D1F45]/70">
-                  <span>🏥</span>
-                  <div className="flex flex-wrap gap-1">
-                    {otroUsuario.obras_sociales.map(o => (
-                      <span key={o} className="bg-[#F5F0FA] text-[#7C5C9E] text-xs px-2 py-0.5 rounded-full">{o}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {otroUsuario.descripcion && (
-                <div className="mt-3 bg-gray-50 rounded-xl p-3">
-                  <p className="text-xs text-[#2D1F45]/60 leading-relaxed">{otroUsuario.descripcion}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

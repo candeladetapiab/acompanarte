@@ -16,6 +16,7 @@ import PublicarBusqueda from './pages/PublicarBusqueda'
 import BusquedasActivas from './pages/BusquedasActivas'
 import PerfilPublicoAT from './pages/PerfilAT'
 import AdminPanel from './pages/AdminPanel'
+import ChatConversacion from './pages/ChatConversacion'
 import NotificadorMensajes from './components/NotificadorMensajes'
 
 function ProtectedRoute({ children, rolRequerido }) {
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route path="/dashboard/at" element={<ProtectedRoute rolRequerido="at"><DashboardAT /></ProtectedRoute>} />
         <Route path="/dashboard/paciente" element={<ProtectedRoute rolRequerido="paciente"><DashboardPaciente /></ProtectedRoute>} />
         <Route path="/publicar-busqueda" element={<ProtectedRoute rolRequerido="paciente"><PublicarBusqueda /></ProtectedRoute>} />
+        <Route path="/mensajes/:otroId" element={<ProtectedRoute><ChatConversacion /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/panel-at" element={<Navigate to="/dashboard/at" replace />} />
         <Route path="/panel-paciente" element={<Navigate to="/dashboard/paciente" replace />} />
